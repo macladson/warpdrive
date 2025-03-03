@@ -1,5 +1,5 @@
 use axum::{body::Body as AxumBody, extract::Request as AxumRequest};
-use axum_warp_compatibility::into_warp_request;
+use axum_warp_compat::into_warp_request;
 use warp::hyper::body::to_bytes as warp_body_to_bytes;
 
 #[tokio::test]

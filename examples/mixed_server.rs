@@ -24,7 +24,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use axum_warp_compatibility::{into_axum_response, into_warp_request};
+use axum_warp_compat::{into_axum_response, into_warp_request};
 use futures::Future;
 use serde::{Deserialize, Serialize};
 use std::{

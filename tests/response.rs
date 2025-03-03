@@ -1,5 +1,5 @@
 use axum::http::StatusCode as AxumStatusCode;
-use axum_warp_compatibility::into_axum_response;
+use axum_warp_compat::into_axum_response;
 use serde_json::json;
 use warp::{
     http::{response::Response as WarpResponse, status::StatusCode as WarpStatusCode},

@@ -1,11 +1,11 @@
 [package]
-name = "axum_warp_compatibility"
+name = "axum_warp_compat"
 version = "0.1.0"
 edition = "2021"
 description = "Proof of concept for converting between Axum and Warp request/response types enabling a single server to handle both types of routes."
 
 [lib]
-name = "axum_warp_compatibility"
+name = "axum_warp_compat"
 path = "src/lib.rs"
 
 [dependencies]

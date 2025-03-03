@@ -90,7 +90,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "axum_warp_compatibility"
+name = "axum_warp_compat"
 version = "0.1.0"
 dependencies = [
  "axum",
