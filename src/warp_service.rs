@@ -1,10 +1,5 @@
-use axum::{
-    body::Body,
-    extract::Request,
-    http::StatusCode,
-    response::Response,
-};
 use crate::{into_axum_response, into_warp_request};
+use axum::{body::Body, extract::Request, http::StatusCode, response::Response};
 use futures::Future;
 use std::{
     convert::Infallible,
@@ -33,6 +28,26 @@ impl WarpService {
             filter: Arc::new(wrapped_filter),
         }
     }
+
+    // Helper function to convert an Axum request to a Warp request,
+    // then handle the Warp response back into an Axum response.
+    async fn process_request(&self, req: Request) -> Result<Response, StatusCode> {
+        let warp_req = into_warp_request(req)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        // Process through Warp.
+        let result = warp::service((*self.filter).clone())
+            .call(warp_req)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let response = result.into_response();
+
+        into_axum_response(response)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+    }
 }
 
 impl Service<Request> for WarpService {
@@ -45,10 +60,10 @@ impl Service<Request> for WarpService {
     }
 
     fn call(&mut self, req: Request) -> Self::Future {
-        let filter = self.filter.clone();
+        let this = self.clone();
 
         Box::pin(async move {
-            let response = match process_request(req, (*filter).clone()).await {
+            let response = match this.process_request(req).await {
                 Ok(resp) => resp,
                 Err(status) => Response::builder()
                     .status(status)
@@ -64,31 +79,4 @@ impl Service<Request> for WarpService {
             Ok(response)
         })
     }
-}
-
-// Helper function to convert an Axum request to a Warp request,
-// then handle the Warp response back into an Axum response.
-async fn process_request<T>(
-    req: Request,
-    filter: warp::filters::BoxedFilter<(T,)>,
-) -> Result<Response, StatusCode>
-where
-    T: Send + Sync + 'static,
-    T: warp::Reply,
-{
-    let warp_req = into_warp_request(req)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // Process through Warp.
-    let result = warp::service(filter)
-        .call(warp_req)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let response = result.into_response();
-
-    into_axum_response(response)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
