@@ -4,15 +4,66 @@ use futures::Future;
 use std::{
     convert::Infallible,
     pin::Pin,
-    sync::Arc,
+    sync::{Arc, Mutex},
     task::{Context, Poll},
 };
 use tower::Service;
 use warp::{Filter, Reply};
 
+type WrappedWarpService = dyn warp::hyper::service::Service<
+        warp::hyper::Request<warp::hyper::Body>,
+        Response = warp::hyper::Response<warp::hyper::Body>,
+        Error = Infallible,
+        Future = Pin<
+            Box<
+                dyn Future<Output = Result<warp::hyper::Response<warp::hyper::Body>, Infallible>>
+                    + Send,
+            >,
+        >,
+    > + Send
+    + Sync;
+
+struct BoxedWarpService<S>(S);
+
+impl<S> Service<warp::hyper::Request<warp::hyper::Body>> for BoxedWarpService<S>
+where
+    S: Service<
+            warp::hyper::Request<warp::hyper::Body>,
+            Response = warp::hyper::Response<warp::hyper::Body>,
+        > + Send
+        + Sync,
+    S::Future: Send + 'static,
+{
+    type Response = warp::hyper::Response<warp::hyper::Body>;
+    type Error = Infallible;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        // WarpService always returns Ok for poll_ready.
+        self.0.poll_ready(cx).map(|r| {
+            match r {
+                Ok(()) => Ok(()),
+                // Unreachable since WarpService never returns an error.
+                Err(_) => unreachable!("Internal service never returns poll_ready error"),
+            }
+        })
+    }
+
+    fn call(&mut self, req: warp::hyper::Request<warp::hyper::Body>) -> Self::Future {
+        let future = self.0.call(req);
+        Box::pin(async move {
+            match future.await {
+                Ok(response) => Ok(response),
+                // Unreachable since WarpService never returns an error.
+                Err(_) => unreachable!("Internal service never returns call error"),
+            }
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct WarpService {
-    filter: Arc<warp::filters::BoxedFilter<(Box<dyn warp::Reply + Send + Sync>,)>>,
+    service: Arc<Mutex<Box<WrappedWarpService>>>,
 }
 
 impl WarpService {
@@ -24,25 +75,33 @@ impl WarpService {
             .map(|reply| Box::new(reply) as Box<dyn warp::Reply + Send + Sync>)
             .boxed();
 
+        let service = warp::service(wrapped_filter);
+        let boxed_service = BoxedWarpService(service);
+
         WarpService {
-            filter: Arc::new(wrapped_filter),
+            service: Arc::new(Mutex::new(Box::new(boxed_service))),
         }
     }
 
-    // Helper function to convert an Axum request to a Warp request,
-    // then handle the Warp response back into an Axum response.
     async fn process_request(&self, req: Request) -> Result<Response, StatusCode> {
         let warp_req = into_warp_request(req)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        // Process through Warp.
-        let result = warp::service((*self.filter).clone())
-            .call(warp_req)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        // Create the future while holding the lock.
+        let future = {
+            let mut service = self
+                .service
+                .lock()
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            service.call(warp_req)
+        };
 
-        let response = result.into_response();
+        // Release the lock before awaiting.
+        let response = future
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .into_response();
 
         into_axum_response(response)
             .await
@@ -60,10 +119,10 @@ impl Service<Request> for WarpService {
     }
 
     fn call(&mut self, req: Request) -> Self::Future {
-        let this = self.clone();
+        let warp_service = self.clone();
 
         Box::pin(async move {
-            let response = match this.process_request(req).await {
+            let response = match warp_service.process_request(req).await {
                 Ok(resp) => resp,
                 Err(status) => Response::builder()
                     .status(status)
