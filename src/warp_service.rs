@@ -88,16 +88,12 @@ impl WarpService {
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        // Create the future while holding the lock.
-        let future = {
-            let mut service = self
-                .service
-                .lock()
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            service.call(warp_req)
-        };
+        let future = self
+            .service
+            .lock()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .call(warp_req);
 
-        // Release the lock before awaiting.
         let response = future
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?

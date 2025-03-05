@@ -23,10 +23,7 @@ use axum::{
 };
 use axum_warp_compat::WarpService;
 use serde::{Deserialize, Serialize};
-use std::{
-    convert::Infallible,
-    net::SocketAddr,
-};
+use std::{convert::Infallible, net::SocketAddr};
 use tokio::net::TcpListener;
 use warp::Filter;
 
