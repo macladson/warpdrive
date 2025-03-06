@@ -1,4 +1,4 @@
-use axum::body::{to_bytes, Body as AxumBody};
+use axum::body::Body as AxumBody;
 use axum::extract::Request as AxumRequest;
 use std::str::FromStr;
 use warp::http::{
@@ -20,12 +20,9 @@ pub async fn into_warp_request(
         builder = builder.header(name.as_str(), value.as_bytes())
     }
 
-    let body_bytes = to_bytes(body, usize::MAX)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let warp_body: WarpBody = body_bytes.into();
-    builder.body(warp_body).map_err(|e| e.to_string())
+    builder
+        .body(WarpBody::wrap_stream(body.into_data_stream()))
+        .map_err(|e| e.to_string())
 }
 
 fn convert_version(version: axum::http::Version) -> WarpVersion {

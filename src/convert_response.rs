@@ -1,14 +1,12 @@
 use axum::body::Body as AxumBody;
 use axum::http::{version::Version, Response as AxumResponse};
+use futures::TryStreamExt;
 use warp::http::Response as WarpResponse;
-use warp::hyper::body::{to_bytes, HttpBody};
+use warp::hyper::body::Body as WarpBody;
 
-pub async fn into_axum_response<T>(
-    warp_response: WarpResponse<T>,
-) -> Result<AxumResponse<AxumBody>, String>
-where
-    T: HttpBody + Send + 'static,
-{
+pub async fn into_axum_response(
+    warp_response: WarpResponse<WarpBody>,
+) -> Result<AxumResponse<AxumBody>, String> {
     let (parts, body) = warp_response.into_parts();
 
     let mut builder = AxumResponse::builder()
@@ -19,12 +17,9 @@ where
         builder = builder.header(name.as_str(), value.as_bytes());
     }
 
-    let body_bytes = to_bytes(body)
-        .await
-        .map_err(|_| "Error converting warp body to bytes".to_string())?;
-    let axum_body: AxumBody = body_bytes.into();
-
-    builder.body(axum_body).map_err(|e| e.to_string())
+    builder
+        .body(AxumBody::from_stream(body.into_stream()))
+        .map_err(|e| e.to_string())
 }
 
 fn convert_version(version: warp::http::Version) -> Version {
