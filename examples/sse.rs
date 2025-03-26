@@ -1,16 +1,15 @@
-//! Example showing SSE (Server-Sent Events) streaming with both Axum and Warp.
+//! Example showing SSE (Server-Sent Events) streaming with both Axum and Warp in a single server.
 //!
 //! To run this example:
 //! ```bash
 //! cargo run --example sse
 //! ```
 //!
-//! Test with curl:
 //! ```bash
-//! # Test Axum SSE
+//! # Axum SSE
 //! curl http://localhost:3000/axum/sse
 //!
-//! # Test Warp SSE
+//! # Warp SSE
 //! curl http://localhost:3000/warp/sse
 //! ```
 
@@ -64,8 +63,8 @@ async fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("Server running on http://{}", addr);
     println!("Available SSE endpoints:");
-    println!("  GET /axum/sse   - Axum SSE endpoint");
-    println!("  GET /warp/sse   - Warp SSE endpoint");
+    println!("  GET /axum/sse");
+    println!("  GET /warp/sse");
 
     let listener = TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

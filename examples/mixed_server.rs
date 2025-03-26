@@ -5,13 +5,12 @@
 //! cargo run --example mixed_server
 //! ```
 //!
-//! Test with curl:
 //! ```bash
-//! # Test Axum routes
+//! # Axum routes
 //! curl http://localhost:3000/axum
 //! curl -X POST -H "Content-Type: application/json" -d '{"content":"test"}' http://localhost:3000/axum/echo
 //!
-//! # Test Warp routes
+//! # Warp routes
 //! curl http://localhost:3000/warp
 //! curl -X POST -H "Content-Type: application/json" -d '{"content":"test"}' http://localhost:3000/warp/echo
 //! ```
@@ -82,10 +81,10 @@ async fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("Server running on http://{}", addr);
     println!("Available routes:");
-    println!("  GET  /axum          - Axum hello endpoint");
-    println!("  POST /axum/echo     - Axum echo endpoint");
-    println!("  GET  /warp          - Warp hello endpoint");
-    println!("  POST /warp/echo     - Warp echo endpoint");
+    println!("  GET  /axum");
+    println!("  POST /axum/echo");
+    println!("  GET  /warp");
+    println!("  POST /warp/echo");
 
     let listener = TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
