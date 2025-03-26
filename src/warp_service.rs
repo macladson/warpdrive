@@ -63,7 +63,7 @@ where
 
 #[derive(Clone)]
 pub struct WarpService {
-    service: Arc<Mutex<Box<WrappedWarpService>>>,
+    service: Arc<Mutex<WrappedWarpService>>,
 }
 
 impl WarpService {
@@ -79,7 +79,7 @@ impl WarpService {
         let boxed_service = BoxedWarpService(service);
 
         WarpService {
-            service: Arc::new(Mutex::new(Box::new(boxed_service))),
+            service: Arc::new(Mutex::new(boxed_service)),
         }
     }
 
