@@ -1,69 +1,20 @@
-use crate::{into_axum_response, into_warp_request};
-use axum::{body::Body, extract::Request, http::StatusCode, response::Response};
-use futures::Future;
 use std::{
     convert::Infallible,
     pin::Pin,
-    sync::{Arc, Mutex},
+    sync::Arc,
     task::{Context, Poll},
 };
+
+use axum::{body::Body, extract::Request, http::StatusCode, response::Response};
+use futures::Future;
 use tower::Service;
 use warp::{Filter, Reply};
 
-type WrappedWarpService = dyn warp::hyper::service::Service<
-        warp::hyper::Request<warp::hyper::Body>,
-        Response = warp::hyper::Response<warp::hyper::Body>,
-        Error = Infallible,
-        Future = Pin<
-            Box<
-                dyn Future<Output = Result<warp::hyper::Response<warp::hyper::Body>, Infallible>>
-                    + Send,
-            >,
-        >,
-    > + Send
-    + Sync;
-
-struct BoxedWarpService<S>(S);
-
-impl<S> Service<warp::hyper::Request<warp::hyper::Body>> for BoxedWarpService<S>
-where
-    S: Service<
-            warp::hyper::Request<warp::hyper::Body>,
-            Response = warp::hyper::Response<warp::hyper::Body>,
-        > + Send
-        + Sync,
-    S::Future: Send + 'static,
-{
-    type Response = warp::hyper::Response<warp::hyper::Body>;
-    type Error = Infallible;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        // WarpService always returns Ok for poll_ready.
-        self.0.poll_ready(cx).map(|r| {
-            match r {
-                Ok(()) => Ok(()),
-                // Unreachable since WarpService never returns an error.
-                Err(_) => unreachable!("Internal service never returns poll_ready error"),
-            }
-        })
-    }
-
-    fn call(&mut self, req: warp::hyper::Request<warp::hyper::Body>) -> Self::Future {
-        let future = self.0.call(req);
-        Box::pin(async move {
-            match future.await {
-                Ok(response) => Ok(response),
-                // Unreachable since WarpService never returns an error.
-                Err(_) => unreachable!("Internal service never returns call error"),
-            }
-        })
-    }
-}
+use crate::{into_axum_response, into_warp_request};
 
 #[derive(Clone)]
 pub struct WarpService {
-    service: Arc<Mutex<WrappedWarpService>>,
+    filter: Arc<warp::filters::BoxedFilter<(Box<dyn warp::Reply + Send + Sync>,)>>,
 }
 
 impl WarpService {
@@ -71,15 +22,12 @@ impl WarpService {
     where
         T: warp::Reply + Send + Sync + 'static,
     {
-        let wrapped_filter = filter
+        let boxed_filter = filter
             .map(|reply| Box::new(reply) as Box<dyn warp::Reply + Send + Sync>)
             .boxed();
 
-        let service = warp::service(wrapped_filter);
-        let boxed_service = BoxedWarpService(service);
-
         WarpService {
-            service: Arc::new(Mutex::new(boxed_service)),
+            filter: Arc::new(boxed_filter),
         }
     }
 
@@ -88,13 +36,10 @@ impl WarpService {
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-        let future = self
-            .service
-            .lock()
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .call(warp_req);
+        let mut service = warp::service(self.filter.as_ref().clone());
 
-        let response = future
+        let response = service
+            .call(warp_req)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             .into_response();
