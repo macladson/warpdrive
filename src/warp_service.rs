@@ -1,5 +1,6 @@
 use std::{
     convert::Infallible,
+    marker::PhantomData,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -8,49 +9,40 @@ use std::{
 use axum::{body::Body, extract::Request, http::StatusCode, response::Response};
 use futures::Future;
 use tower::Service;
-use warp::{Filter, Reply};
+use warp::{filters::BoxedFilter, Reply};
 
 use crate::{into_axum_response, into_warp_request};
 
-#[derive(Clone)]
-pub struct WarpService {
-    filter: Arc<warp::filters::BoxedFilter<(Box<dyn warp::Reply + Send + Sync>,)>>,
+pub struct WarpService<T = Box<dyn warp::Reply + Send + Sync>> {
+    filter: Arc<BoxedFilter<(T,)>>,
+    _phantom: PhantomData<T>,
 }
 
-impl WarpService {
-    pub fn new<T>(filter: warp::filters::BoxedFilter<(T,)>) -> Self
-    where
-        T: warp::Reply + Send + Sync + 'static,
-    {
-        let boxed_filter = filter
-            .map(|reply| Box::new(reply) as Box<dyn warp::Reply + Send + Sync>)
-            .boxed();
-
+impl<T> Clone for WarpService<T> {
+    fn clone(&self) -> Self {
         WarpService {
-            filter: Arc::new(boxed_filter),
+            filter: Arc::clone(&self.filter),
+            _phantom: PhantomData,
         }
     }
+}
 
-    async fn process_request(&self, req: Request) -> Result<Response, StatusCode> {
-        let warp_req = into_warp_request(req)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-        let mut service = warp::service(self.filter.as_ref().clone());
-
-        let response = service
-            .call(warp_req)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .into_response();
-
-        into_axum_response(response)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+impl<T> WarpService<T>
+where
+    T: warp::Reply + Send + Sync + 'static,
+{
+    pub fn new(filter: BoxedFilter<(T,)>) -> Self {
+        WarpService {
+            filter: Arc::new(filter),
+            _phantom: PhantomData,
+        }
     }
 }
 
-impl Service<Request> for WarpService {
+impl<T> Service<Request> for WarpService<T>
+where
+    T: warp::Reply + Send + Sync + 'static,
+{
     type Response = Response;
     type Error = Infallible;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -60,23 +52,49 @@ impl Service<Request> for WarpService {
     }
 
     fn call(&mut self, req: Request) -> Self::Future {
-        let warp_service = self.clone();
+        let filter = Arc::clone(&self.filter);
 
         Box::pin(async move {
-            let response = match warp_service.process_request(req).await {
+            let response = match process_request_with_filter(req, &filter).await {
                 Ok(resp) => resp,
-                Err(status) => Response::builder()
-                    .status(status)
-                    .body(Body::from(format!("Error: {}", status)))
-                    .unwrap_or_else(|_| {
-                        Response::builder()
-                            .status(StatusCode::INTERNAL_SERVER_ERROR)
-                            .body(Body::empty())
-                            .unwrap()
-                    }),
+                Err(status) => create_error_response(status),
             };
-
             Ok(response)
         })
     }
+}
+
+async fn process_request_with_filter<T>(
+    req: Request,
+    filter: &BoxedFilter<(T,)>
+) -> Result<Response, StatusCode>
+where
+    T: warp::Reply + Send + Sync + 'static,
+{
+    let warp_req = into_warp_request(req)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut service = warp::service(filter.clone());
+
+    let reply = service
+        .call(warp_req)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    into_axum_response(reply.into_response())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+fn create_error_response(status: StatusCode) -> Response {
+    Response::builder()
+        .status(status)
+        .body(Body::from(format!("Error: {}", status)))
+        .unwrap_or_else(|_| {
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Body::empty())
+                .unwrap()
+        })
 }
