@@ -1,12 +1,13 @@
 use axum::http::StatusCode as AxumStatusCode;
-use axum_warp_compat::into_axum_response;
 use serde_json::json;
 use warp::{
+    Reply,
     http::{response::Response as WarpResponse, status::StatusCode as WarpStatusCode},
     hyper::Body as WarpBody,
     reply::{json, with_header, with_status},
-    Reply,
 };
+
+use crate::convert_response::into_axum_response;
 
 #[tokio::test]
 async fn test_basic_response() {

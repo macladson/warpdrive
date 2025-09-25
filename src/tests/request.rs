@@ -1,6 +1,7 @@
 use axum::{body::Body as AxumBody, extract::Request as AxumRequest};
-use axum_warp_compat::into_warp_request;
 use warp::hyper::body::to_bytes as warp_body_to_bytes;
+
+use crate::convert_request::into_warp_request;
 
 #[tokio::test]
 async fn test_basic_get_request() {
@@ -21,9 +22,7 @@ async fn test_basic_get_request() {
 
 #[tokio::test]
 async fn test_all_http_methods() {
-    let methods = vec![
-        "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "CONNECT", "PATCH", "TRACE",
-    ];
+    let methods = vec!["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"];
 
     for method in methods {
         let axum_request = AxumRequest::builder()

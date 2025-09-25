@@ -1,8 +1,9 @@
+use std::str::FromStr;
+
 use axum::body::Body as AxumBody;
 use axum::extract::Request as AxumRequest;
-use std::str::FromStr;
 use warp::http::{
-    method::Method, uri::Uri, version::Version as WarpVersion, Request as WarpRequest,
+    Request as WarpRequest, method::Method, uri::Uri, version::Version as WarpVersion,
 };
 use warp::hyper::body::Body as WarpBody;
 
@@ -11,9 +12,15 @@ pub async fn into_warp_request(
 ) -> Result<WarpRequest<WarpBody>, String> {
     let (parts, body) = axum_request.into_parts();
 
+    let method = Method::from_str(parts.method.as_ref())
+        .map_err(|e| format!("Invalid method '{}': {}", parts.method, e))?;
+
+    let uri = Uri::try_from(&parts.uri.to_string())
+        .map_err(|e| format!("Invalid URI '{}': {}", parts.uri, e))?;
+
     let mut builder = WarpRequest::builder()
-        .method(Method::from_str(parts.method.as_ref()).map_err(|e| e.to_string())?)
-        .uri(Uri::try_from(&parts.uri.to_string()).map_err(|e| e.to_string())?)
+        .method(method)
+        .uri(uri)
         .version(convert_version(parts.version));
 
     for (name, value) in parts.headers.iter() {
@@ -22,7 +29,7 @@ pub async fn into_warp_request(
 
     builder
         .body(WarpBody::wrap_stream(body.into_data_stream()))
-        .map_err(|e| e.to_string())
+        .map_err(|e| format!("Failed to build Warp request: {}", e))
 }
 
 fn convert_version(version: axum::http::Version) -> WarpVersion {

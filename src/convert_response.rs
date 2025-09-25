@@ -1,5 +1,5 @@
 use axum::body::Body as AxumBody;
-use axum::http::{version::Version, Response as AxumResponse};
+use axum::http::{Response as AxumResponse, version::Version};
 use futures::TryStreamExt;
 use warp::http::Response as WarpResponse;
 use warp::hyper::body::Body as WarpBody;
@@ -9,8 +9,11 @@ pub async fn into_axum_response(
 ) -> Result<AxumResponse<AxumBody>, String> {
     let (parts, body) = warp_response.into_parts();
 
+    let status_code = axum::http::StatusCode::from_u16(parts.status.as_u16())
+        .map_err(|e| format!("Invalid status code {}: {}", parts.status.as_u16(), e))?;
+
     let mut builder = AxumResponse::builder()
-        .status(axum::http::StatusCode::from_u16(parts.status.as_u16()).map_err(|e| e.to_string())?)
+        .status(status_code)
         .version(convert_version(parts.version));
 
     for (name, value) in parts.headers.iter() {
@@ -19,7 +22,7 @@ pub async fn into_axum_response(
 
     builder
         .body(AxumBody::from_stream(body.into_stream()))
-        .map_err(|e| e.to_string())
+        .map_err(|e| format!("Failed to build Axum response: {}", e))
 }
 
 fn convert_version(version: warp::http::Version) -> Version {

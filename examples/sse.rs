@@ -13,19 +13,20 @@
 //! curl http://localhost:3000/warp/sse
 //! ```
 
+use std::{convert::Infallible, net::SocketAddr, time::Duration};
+
 use axum::{
+    Router,
     response::sse::{Event as AxumEvent, KeepAlive, Sse},
     routing::get,
-    Router,
 };
-use axum_warp_compat::WarpService;
 use chrono::Local;
 use futures::Stream;
-use std::{convert::Infallible, net::SocketAddr, time::Duration};
 use tokio::net::TcpListener;
-use tokio_stream::wrappers::IntervalStream;
 use tokio_stream::StreamExt;
-use warp::{filters::sse::Event as WarpEvent, Filter};
+use tokio_stream::wrappers::IntervalStream;
+use warp::{Filter, filters::sse::Event as WarpEvent};
+use warpdrive::WarpService;
 
 fn timestamp_stream() -> impl Stream<Item = String> {
     IntervalStream::new(tokio::time::interval(Duration::from_secs(1)))

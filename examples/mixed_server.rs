@@ -15,16 +15,17 @@
 //! curl -X POST -H "Content-Type: application/json" -d '{"content":"test"}' http://localhost:3000/warp/echo
 //! ```
 
+use std::{convert::Infallible, net::SocketAddr};
+
 use axum::{
+    Router,
     extract::Json,
     routing::{get, post},
-    Router,
 };
-use axum_warp_compat::WarpService;
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, net::SocketAddr};
 use tokio::net::TcpListener;
 use warp::Filter;
+use warpdrive::WarpService;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Message {

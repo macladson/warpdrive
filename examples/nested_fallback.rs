@@ -23,16 +23,13 @@
 //! curl http://localhost:3000/anything/else
 //! ```
 
-use axum::{
-    response::Response,
-    routing::get,
-    Router,
-};
-use axum_warp_compat::WarpService;
 use std::{convert::Infallible, net::SocketAddr};
+
+use axum::{Router, response::Response, routing::get};
 use tokio::net::TcpListener;
 use tower::Service;
 use warp::Filter;
+use warpdrive::WarpService;
 
 async fn axum_hello() -> &'static str {
     "Hello from Axum!"
@@ -50,7 +47,10 @@ impl Service<axum::extract::Request> for FinalFallback {
     type Error = Infallible;
     type Future = std::future::Ready<Result<Self::Response, Self::Error>>;
 
-    fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        &mut self,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
         std::task::Poll::Ready(Ok(()))
     }
 
@@ -74,9 +74,9 @@ async fn main() {
 
     // Create layered router
     let app = Router::new()
-        .route("/axum/hello", get(axum_hello))      // Layer 1: Axum
-        .nest_service("/warp", warp_service)        // Layer 2: Warp
-        .fallback_service(FinalFallback);           // Layer 3: Fallback
+        .route("/axum/hello", get(axum_hello)) // Layer 1: Axum
+        .nest_service("/warp", warp_service) // Layer 2: Warp
+        .fallback_service(FinalFallback); // Layer 3: Fallback
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("Server running on http://{}", addr);

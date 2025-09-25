@@ -1,11 +1,19 @@
 [package]
-name = "axum_warp_compat"
+name = "warpdrive"
 version = "0.1.0"
-edition = "2021"
-description = "Proof of concept for converting between Axum and Warp request/response types enabling a single server to handle both types of routes."
+edition = "2024"
+license = "MIT OR Apache-2.0"
+authors = ["Mac Ladson <mjladson@pm.me>"]
+description = "A compatibility library for running Warp filters within Axum servers."
+keywords = ["axum", "warp", "migration", "compatibility", "web"]
+categories = ["web-programming", "web-programming::http-server"]
+repository = "https://github.com/macladson/warpdrive"
+homepage = "https://github.com/macladson/warpdrive"
+documentation = "https://docs.rs/warpdrive"
+readme = "README.md"
 
 [lib]
-name = "axum_warp_compat"
+name = "warpdrive"
 path = "src/lib.rs"
 
 [dependencies]
@@ -15,6 +23,7 @@ tower = "0.5"
 warp = "0.3"
 
 [dev-dependencies]
+axum = { version = "0.8", features = ["ws"] }
 chrono = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

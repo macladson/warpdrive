@@ -31,18 +31,19 @@
 //!   -d '{"message":"hello"}'
 //! ```
 
+use std::{convert::Infallible, net::SocketAddr};
+
 use axum::{
+    Router,
     extract::Json,
     http::{HeaderValue, Method},
     routing::post,
-    Router,
 };
-use axum_warp_compat::WarpService;
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, net::SocketAddr};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 use warp::Filter;
+use warpdrive::WarpService;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Message {
